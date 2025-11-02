@@ -1,3 +1,5 @@
 env
 __pycache__
 wallet.json
+wallets.json
+signatures.json

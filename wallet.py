@@ -1,57 +1,38 @@
-import json, os
-from pycardano import (
-    HDWallet,
-    Network,
-    Address,
-    PaymentVerificationKey,
-    PaymentSigningKey,
-    StakeVerificationKey,
-)
+import json
+import os
 
-WALLET_FILE = "wallet.json"
+WALLET_FILE = "wallets.json"
+
 
 class WalletManager:
-    def __init__(self, network: Network = Network.TESTNET):
-        self.network = network
-        self.wallet = None
+    def __init__(self, path: str = WALLET_FILE):
+        self.path = path
+        self.wallets = self._load_wallets()
 
-    def create_or_load_wallet(self, path: str = WALLET_FILE):
-        if os.path.exists(path):
-            with open(path, "r", encoding="utf-8") as f:
-                data = json.load(f)
-                mnemonic = data["mnemonic"]
-                print("Loaded existing wallet from", path)
-                self.wallet = HDWallet.from_mnemonic(mnemonic)
-        else:
-            print("Creating new wallet...")
-            mnemonic = HDWallet.generate_mnemonic(language="english", strength=256)
-            self.wallet = HDWallet.from_mnemonic(mnemonic)
-            with open(path, "w", encoding="utf-8") as f:
-                json.dump({"mnemonic": mnemonic}, f, indent=2)
-            print("\n--- BACKUP THESE 24 WORDS ---")
-            print(mnemonic)
-            print("---------------------------------\n")
+    def _load_wallets(self):
+        if not os.path.exists(self.path):
+            raise FileNotFoundError(f"Wallet file not found: {self.path}")
 
-    def get_payment_key(self):
-        node = self.wallet.derive_from_path("m/1852'/1815'/0'/0/0")
-        seed = node.xprivate_key[-32:]
-        return PaymentSigningKey.from_primitive(seed)
+        with open(self.path, "r", encoding="utf-8") as f:
+            data = json.load(f)
 
-    def _stake_node(self):
-        return self.wallet.derive_from_path("m/1852'/1815'/0'/2/0")
+        if "wallets" not in data or not isinstance(data["wallets"], list):
+            raise ValueError("Invalid wallet JSON structure. Expected key 'wallets'.")
 
-    def get_address(self) -> str:
-        pay_node = self.wallet.derive_from_path("m/1852'/1815'/0'/0/0")
-        pay_pub_bytes = pay_node.public_key
-        stk_pub_bytes = self._stake_node().public_key
+        return data["wallets"]
 
-        pay_vkey = PaymentVerificationKey.from_primitive(pay_pub_bytes)
-        stk_vkey = StakeVerificationKey.from_primitive(stk_pub_bytes)
-        addr = Address(pay_vkey.hash(), stk_vkey.hash(), network=self.network)
-        return str(addr)
+    def list_wallets(self):
+        """Return a list of all wallet entries."""
+        return self.wallets
 
-    def get_pubkey_hex(self) -> str:
-        pay_node = self.wallet.derive_from_path("m/1852'/1815'/0'/0/0")
-        pay_pub_bytes = pay_node.public_key
-        pay_vkey = PaymentVerificationKey.from_primitive(pay_pub_bytes)
-        return pay_vkey.to_primitive().hex()
+    def get_wallet(self, index: int = 0):
+        """Get a specific wallet by index (default first)."""
+        if index < 0 or index >= len(self.wallets):
+            raise IndexError("Wallet index out of range.")
+        return self.wallets[index]
+
+    def get_address(self, index: int = 0):
+        return self.get_wallet(index)["address"]
+
+    def get_pubkey_hex(self, index: int = 0):
+        return self.get_wallet(index).get("pubkey_hex")
